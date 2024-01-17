@@ -1,0 +1,28 @@
+[tool.poetry]
+name = "molecular-simulations"
+version = "0.1.0"
+description = ""
+authors = ["Alessio  <alessio.caciagli@okra.ai>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+numpy = "^1.23.5"
+matplotlib = "^3.6.2"
+numba = "^0.56.4"
+jupyterlab = "^4.0.10"
+mayavi = "^4.8.1"
+PyQt5 = "^5.15.10"
+ipywidgets = "^8.1.1"
+ipyevents = "^2.0.2"
+
+[tool.poetry.group.dev.dependencies]
+black = "^23.12.1"
+isort = "^5.13.2"
+flake8 = "^7.0.0"
+ipykernel = "^6.29.0"
+jupyterlab-code-formatter = "^2.2.1"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
