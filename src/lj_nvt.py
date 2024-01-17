@@ -12,11 +12,16 @@ def lj_nvt(
     snum: int = 1000,  # Sampling steps
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     np.random.seed(42)
-    # reduced units:
-    # U in units of epsilon
-    # r in units of sigma
-    # T in units of epsilon/k
-    # V in units of sigma^3
+    # Reduced units:
+    # epsilon (energy)
+    # sigma (length)
+    # m (mass)
+
+    # U* = U * epsilon
+    # T* = kb * T / epsilon
+    # P* = P * sigma^3 / epsilon
+    # rho* = rho * sigma^3
+
     V = N / rho
     L = V ** (1 / 3)
     cutoff = L / 2  # cutoff
@@ -72,6 +77,7 @@ def lj_nvt(
     def sample(positions: np.ndarray, K: int, M: float) -> float:
         u = 0
         for i in range(N):
+            # Calculate the pairwise quantity u by summing over all pair interactions
             particle = positions[i]
             dists = dist(positions[i + 1 :], particle)
             u += single_enrg(dists, K, M)
@@ -81,19 +87,20 @@ def lj_nvt(
     def mcmove(
         positions: np.ndarray, mask: np.array, delta: float
     ) -> Tuple[np.ndarray, float, int]:
+        # Random particle selection
         x = np.random.randint(0, high=N)
         pos = positions[x]
-        # Set mask to exclude x
+        # Set mask to exclude particle
         mask[:] = 1
         mask[x] = 0
         dists = dist(positions[mask == 1], pos)
-        # Calculate initial energy contribution of particle i
+        # Calculate initial energy contribution of particle
         eno = single_enrg(dists, 1, 1)
-        # Displacement vector
+        # Displace particle
         delta_v = delta * (np.random.random(size=(3,)) - 0.5)
         new_pos = apply_bc(pos + delta_v)
         ndists = dist(positions[mask == 1], new_pos)
-        # Calculate new energy
+        # Calculate new energy contribution of particle
         enn = single_enrg(ndists, 1, 1)
         if enn <= eno:
             # Move is always accepted
