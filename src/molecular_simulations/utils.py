@@ -1,6 +1,67 @@
 from mayavi import mlab
 import matplotlib.pyplot as plt
 import numpy as np
+from numba import njit
+
+
+def initialise_lattice(N: int, L: float) -> np.ndarray:
+    """Initialise particles on a cubic lattice with side L
+
+    Args:
+        N (int): number of particles
+        L (float): lattice size
+
+    Returns:
+        np.ndarray: array of initial positions
+    """
+    positions = np.zeros(shape=(N, 3))
+    n_per_side = np.ceil(N ** (1 / 3))
+    d = L / n_per_side
+    for i in range(N):
+        positions[i] = [
+            (i % n_per_side),
+            (i // n_per_side) % (n_per_side),
+            (i // (n_per_side**2)),
+        ]
+        positions[i] *= d
+    return positions
+
+
+def initialise_velocities(N: int, T: float) -> np.ndarray:
+    """Initialise velocities (random).
+    Shift and rescale to satisfy mean T and 0-momentum
+
+    Args:
+        N (int): number of particles
+
+    Returns:
+        np.ndarray: array of initial velocities.
+    """
+    velocities = np.random.random(N, 3) - 0.5
+
+    cm_v = velocities.mean(axis=0)
+    cm_v2 = (velocities**2).mean(axis=0)
+    scale = np.sqrt(3 * T / cm_v2)
+
+    return (velocities - cm_v) * scale
+
+
+@njit
+def apply_bc(X: np.ndarray, L: float) -> np.ndarray:
+    X[X > L] -= L
+    X[X < 0] += L
+    return X
+
+
+@njit
+def dist(positions: np.ndarray, particle: np.ndarray, L: float) -> np.ndarray:
+    # Matrix of distances between all positions and particle
+    dists = positions - particle
+    # Apply image convention
+    for i in range(dists.shape[1]):
+        dists[:, i] = apply_bc(dists[:, i] + L / 2, L) - L / 2
+    # Calculate euclidean squared distance
+    return (dists**2).sum(axis=1)
 
 
 def plot_snapshot(pos: np.ndarray, distance: float = 40):

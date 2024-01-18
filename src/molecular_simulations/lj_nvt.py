@@ -2,6 +2,7 @@ from typing import Tuple
 import numpy as np
 from numba import njit
 import csv
+from molecular_simulations.utils import initialise_lattice, apply_bc, dist
 
 
 def lj_nvt(
@@ -34,35 +35,6 @@ def lj_nvt(
         (16 * np.pi * rho**2) / 3 * (2 * (1 / cutoff) ** 9 / 3 - (1 / cutoff) ** 3)
     )
 
-    def init(N: int, L: float) -> np.ndarray:
-        positions = np.zeros(shape=(N, 3))
-        n_per_side = np.ceil(N ** (1 / 3))
-        d = L / n_per_side
-        for i in range(N):
-            positions[i] = [
-                (i % n_per_side),
-                (i // n_per_side) % (n_per_side),
-                (i // (n_per_side**2)),
-            ]
-            positions[i] *= d
-        return positions
-
-    @njit
-    def apply_bc(X: np.ndarray) -> np.ndarray:
-        X[X > L] -= L
-        X[X < 0] += L
-        return X
-
-    @njit
-    def dist(positions: np.ndarray, particle: np.ndarray) -> np.ndarray:
-        # Matrix of distances between all positions and particle
-        dists = positions - particle
-        # Apply image convention
-        for i in range(dists.shape[1]):
-            dists[:, i] = apply_bc(dists[:, i] + L / 2) - L / 2
-        # Calculate euclidean squared distance
-        return (dists**2).sum(axis=1)
-
     @njit
     def single_enrg(
         dists: np.ndarray,
@@ -80,7 +52,7 @@ def lj_nvt(
         for i in range(N):
             # Calculate the pairwise quantity u by summing over all pair interactions
             particle = positions[i]
-            dists = dist(positions[i + 1 :], particle)
+            dists = dist(positions[i + 1 :], particle, L)
             u += single_enrg(dists, K, M)
         return u
 
@@ -94,13 +66,13 @@ def lj_nvt(
         # Set mask to exclude particle
         mask[:] = 1
         mask[x] = 0
-        dists = dist(positions[mask == 1], pos)
+        dists = dist(positions[mask == 1], pos, L)
         # Calculate initial energy contribution of particle
         eno = single_enrg(dists, 1, 1)
         # Displace particle
         delta_v = delta * (np.random.random(size=(3,)) - 0.5)
-        new_pos = apply_bc(pos + delta_v)
-        ndists = dist(positions[mask == 1], new_pos)
+        new_pos = apply_bc(pos + delta_v, L)
+        ndists = dist(positions[mask == 1], new_pos, L)
         # Calculate new energy contribution of particle
         enn = single_enrg(ndists, 1, 1)
         if enn <= eno:
@@ -121,7 +93,7 @@ def lj_nvt(
         return delta
 
     # Tracking arrays
-    positions = init(N, L)
+    positions = initialise_lattice(N, L)
     mask = np.zeros(shape=(N,), dtype=int)
     u = np.zeros(shape=(snum,))
     vr = np.zeros(shape=(snum,))
