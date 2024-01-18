@@ -1,6 +1,5 @@
 from mayavi import mlab
 import matplotlib.pyplot as plt
-from numpy import random
 import numpy as np
 
 

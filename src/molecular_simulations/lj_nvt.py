@@ -1,6 +1,7 @@
 from typing import Tuple
 import numpy as np
 from numba import njit
+import csv
 
 
 def lj_nvt(
@@ -166,3 +167,15 @@ def lj_nvt(
     # Returns positions, energies per particle and virial
     # Estimates have long tail corrections
     return positions, u / N + tail_e, vr + tail_p
+
+
+def lj_nvt_isoterm(T: float):
+    N = 500
+    for rho in [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]:
+        print("T: {0} rho: {1}".format(T, rho))
+        delta = 0.25
+        _, u, vr = lj_nvt(N, rho, T, delta, eqnum=1000, snum=2500)
+        P = rho * T + vr / (3 * N / rho)
+        with open("data/nvt_estimates.csv", "a", newline="") as file:
+            writer = csv.writer(file)
+            writer.writerow([T, rho, u.mean(), P.mean()])
