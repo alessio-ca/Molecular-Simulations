@@ -49,10 +49,10 @@ def lj_nvt(
     @njit
     def sample(positions: np.ndarray, K: int, M: float) -> float:
         u = 0
-        for i in range(N):
+        for i in range(N - 1):
             # Calculate the pairwise quantity u by summing over all pair interactions
             particle = positions[i]
-            dists = dist(positions[i + 1 :], particle, L)
+            _, dists = dist(positions[i + 1 :], particle, L)
             u += single_enrg(dists, K, M)
         return u
 
@@ -66,13 +66,13 @@ def lj_nvt(
         # Set mask to exclude particle
         mask[:] = 1
         mask[x] = 0
-        dists = dist(positions[mask == 1], pos, L)
+        _, dists = dist(positions[mask == 1], pos, L)
         # Calculate initial energy contribution of particle
         eno = single_enrg(dists, 1, 1)
         # Displace particle
         delta_v = delta * (np.random.random(size=(3,)) - 0.5)
-        new_pos = apply_bc(pos + delta_v, L)
-        ndists = dist(positions[mask == 1], new_pos, L)
+        new_pos = pos + delta_v
+        _, ndists = dist(positions[mask == 1], new_pos, L)
         # Calculate new energy contribution of particle
         enn = single_enrg(ndists, 1, 1)
         if enn <= eno:
@@ -138,7 +138,7 @@ def lj_nvt(
         )
     # Returns positions, energies per particle and virial
     # Estimates have long tail corrections
-    return positions, u / N + tail_e, vr + tail_p
+    return apply_bc(positions - L / 2, L), u / N + tail_e, vr + tail_p
 
 
 def lj_nvt_isoterm(T: float):

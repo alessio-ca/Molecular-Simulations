@@ -37,31 +37,26 @@ def initialise_velocities(N: int, T: float) -> np.ndarray:
     Returns:
         np.ndarray: array of initial velocities.
     """
-    velocities = np.random.random(N, 3) - 0.5
+    velocities = np.random.random((N, 3)) - 0.5
 
     cm_v = velocities.mean(axis=0)
-    cm_v2 = (velocities**2).mean(axis=0)
+    cm_v2 = (velocities**2).sum() / N
     scale = np.sqrt(3 * T / cm_v2)
-
     return (velocities - cm_v) * scale
 
 
 @njit
 def apply_bc(X: np.ndarray, L: float) -> np.ndarray:
-    X[X > L] -= L
-    X[X < 0] += L
-    return X
+    return X - L * np.rint(X / L)
 
 
 @njit
 def dist(positions: np.ndarray, particle: np.ndarray, L: float) -> np.ndarray:
     # Matrix of distances between all positions and particle
-    dists = positions - particle
     # Apply image convention
-    for i in range(dists.shape[1]):
-        dists[:, i] = apply_bc(dists[:, i] + L / 2, L) - L / 2
+    delta_pos = apply_bc(particle - positions, L)
     # Calculate euclidean squared distance
-    return (dists**2).sum(axis=1)
+    return delta_pos, (delta_pos**2).sum(axis=1)
 
 
 def plot_snapshot(pos: np.ndarray, distance: float = 40):
