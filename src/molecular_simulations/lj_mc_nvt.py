@@ -2,7 +2,7 @@ from typing import Tuple
 import numpy as np
 from numba import njit
 import csv
-from molecular_simulations.utils import initialise_lattice, apply_bc, dist
+from molecular_simulations.utils import initialise_lattice, dist
 
 
 def lj_nvt(
@@ -138,7 +138,7 @@ def lj_nvt(
         )
     # Returns positions, energies per particle and virial
     # Estimates have long tail corrections
-    return apply_bc(positions - L / 2, L), u / N + tail_e, vr + tail_p
+    return positions, u / N + tail_e, vr + tail_p
 
 
 def lj_nvt_isoterm(T: float):
