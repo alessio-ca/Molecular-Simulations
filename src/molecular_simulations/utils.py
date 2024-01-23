@@ -1,4 +1,3 @@
-import matplotlib.pyplot as plt
 import numpy as np
 from numba import njit
 from typing import Tuple
@@ -59,40 +58,13 @@ def dist(positions: np.ndarray, particle: np.ndarray, L: float) -> np.ndarray:
     return delta_pos, (delta_pos**2).sum(axis=1)
 
 
-def plot_samples(u: np.ndarray, label: str):
-    _, axs = plt.subplots(1, 2, figsize=(10, 5), tight_layout=True)
-    axs[0].plot(u)
-    axs[0].set_xlabel("Steps")
-    axs[0].set_ylabel(label)
-
-    # add a 'best fit' line to the histogram
-    u = np.sort(u)
-    mu, sigma = u.mean(), u.std()
-    y = (1 / (np.sqrt(2 * np.pi) * sigma)) * np.exp(
-        -0.5 * (1 / sigma * (np.sort(u) - mu)) ** 2
-    )
-
-    textstr = "\n".join([r"$\mu=%.2f$" % (mu,), r"$\sigma=%.2f$" % (sigma,)])
-    props = dict(boxstyle="round", facecolor="w", alpha=0.5)
-
-    axs[1].hist(u, density=True)
-    axs[1].plot(u, y, "--")
-    axs[1].set_xlabel(label)
-    # place a text box in upper left in axes coords
-    axs[1].text(
-        0.05,
-        0.95,
-        textstr,
-        transform=axs[1].transAxes,
-        fontsize=14,
-        verticalalignment="top",
-        bbox=props,
-    )
-    plt.show()
-
-
 def writeXYZ(trajectory: np.ndarray, filename: str, atomname: str = "Ar"):
     f = open(filename, "w")
+
+    if len(trajectory.shape) == 2:
+        # This is a snapshot, add the third axis
+        trajectory = trajectory[None, :]
+
     N = str(trajectory.shape[1])
     for step in trajectory:
         f.write(N + "\n\n")
