@@ -11,7 +11,7 @@ numpy = "^1.23.5"
 matplotlib = "^3.6.2"
 numba = "^0.57"
 jupyterlab = "^4.0.10"
-pandas = "^2.1"
+pandas = {version="^2.1", extras=["hdf5", "parquet", "feather", "spss", "excel"]}
 ipykernel = "^6.29.0"
 
 [tool.poetry.group.dev.dependencies]

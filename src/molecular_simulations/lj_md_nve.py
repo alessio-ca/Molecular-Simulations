@@ -1,12 +1,18 @@
 from typing import Tuple
 
 import numpy as np
+from numba import njit
 
 from molecular_simulations.utils import (
     dist,
     initialise_lattice,
     initialise_velocities,
+)
+from molecular_simulations.sampling import (
     Accumulator,
+    MSDCorrelator,
+    DCorrelator,
+    RadialDistribution,
 )
 
 
@@ -141,3 +147,148 @@ def lj_md(
     prod_run()
 
     return eq_array, positions, velocities, forces, accumulator_k, accumulator_u, frames
+
+
+def lj_md_study(
+    N: int,
+    rho: float,
+    T: float,
+    dt: float,
+    eqnum: int = 100,  # Equilibration steps
+    snum: int = 1000,  # Sampling steps
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    np.random.seed(42)
+    # Reduced units:
+    # epsilon (energy)
+    # sigma (length)
+    # m (mass)
+
+    # U* = U * epsilon
+    # T* = kb * T / epsilon
+    # P* = P * sigma^3 / epsilon
+    # rho* = rho * sigma^3
+
+    V = N / rho
+    L = V ** (1 / 3)
+    cutoff = 2.5  # cutoff
+    cutoff_sq = cutoff**2
+    # Tail of the energy contribution due to truncation
+    tail_e = (1 / cutoff_sq) ** 6 - (1 / cutoff_sq) ** 3
+
+    @njit
+    def single_force(
+        dists: np.ndarray,
+        delta_pos: np.ndarray,
+        forces: np.ndarray,
+    ) -> Tuple[float, np.ndarray]:
+        # Apply cutoff as boolean mask & calculate all single energy contributions
+        rc = dists < cutoff_sq
+        r2 = 1 / dists[rc]
+        r6 = r2**3
+        en = r6 * (r6 - 1)
+        vir = r6 * (r6 - 0.5)
+        term = r2 * vir
+        ff = (
+            delta_pos[rc] * term[:, None]
+        )  # Forces on particle i by all remaining pairs
+        forces[rc] -= ff  # Substract ff to the forces array (3rd law)
+
+        return en.sum() - tail_e * rc.sum(), vir.sum(), ff.sum(axis=0)
+
+    @njit
+    def update_forces(
+        positions: np.ndarray, forces: np.ndarray, distances: np.ndarray
+    ) -> float:
+        en = 0
+        vir = 0
+        forces[:] = 0
+        c = 0
+        for i in range(N - 1):
+            # Calculate distances and deltas
+            particle = positions[i]
+            delta_pos, dists = dist(positions[i + 1 :], particle, L)
+            # Update distance array
+            n_points = N - 1 - i
+            distances[c : c + n_points] = dists
+            c += n_points
+            # Calculate the force, energy and virial of particle i
+            eni, viri, fi = single_force(dists, delta_pos, forces[i + 1 :])
+            # Update quantities
+            en += eni
+            vir += viri
+            forces[i] += fi
+
+        return en, vir
+
+    def integrate(
+        positions: np.ndarray,
+        positions_o: np.ndarray,
+        velocities: np.ndarray,
+        forces: np.ndarray,
+    ):
+        positions_n = 2 * positions - positions_o + dt**2 * 48 * forces  # Verlet
+        velocities[:] = (positions_n - positions_o) / (2 * dt)  # Velocity
+        # Update
+        positions_o[:] = positions[:]
+        positions[:] = positions_n[:]
+
+    def md_loop(
+        positions: np.ndarray,
+        positions_o: np.ndarray,
+        velocities: np.ndarray,
+        forces: np.ndarray,
+        distances: np.ndarray,
+    ) -> Tuple[float, float]:
+        en, vir = update_forces(positions, forces, distances)
+        integrate(positions, positions_o, velocities, forces)
+        v_sq = (velocities**2).sum() / N
+        return en, vir, v_sq
+
+    def eq_run():
+        for i in range(eqnum):
+            en, _, v_sq = md_loop(positions, positions_o, velocities, forces, distances)
+            k = v_sq / 2
+            u = 4 * en / N
+
+            if (i + 1) % 100 == 0:
+                print(
+                    "\rStep: {0}/{1} Energy: {2:.6f} U: {3:.6f} K: {4:.6f}".format(
+                        i + 1, eqnum, u + v_sq / 2, u, k
+                    ),
+                    end="\r",
+                )
+
+    def prod_run():
+        for i in range(snum):
+            en, vir, v_sq = md_loop(
+                positions, positions_o, velocities, forces, distances
+            )
+            acc_u.accumulate(4 * en / N)
+            acc_k.accumulate(v_sq / 2)
+            acc_p.accumulate(48 * vir / (3 * V) + rho * v_sq / 3)
+            corr_v.accumulate(velocities)
+            rdf.accumulate(distances)
+
+            if (i + 1) % 1000 == 0:
+                print(
+                    "Step: {0}/{1} Energy: {2:.6f} U: {3:.6f} K: {4:.6f}".format(
+                        i + 1, snum, 4 * en / N + v_sq / 2, 4 * en / N, v_sq / 2
+                    ),
+                    end="\r",
+                )
+
+    # Tracking arrays
+    positions = initialise_lattice(N, L)
+    velocities = initialise_velocities(N, T)
+    forces = np.zeros(shape=(N, 3))
+    positions_o = positions - velocities * dt
+    distances = np.zeros(shape=(int(N * (N - 1) / 2)))
+    eq_run()
+
+    acc_u = Accumulator(snum)
+    acc_k = Accumulator(snum)
+    acc_p = Accumulator(snum)
+    corr_v = DCorrelator(snum, MSDCorrelator, N, dim=3)
+    rdf = RadialDistribution(L, 500)
+    prod_run()
+    return positions, velocities, forces, acc_u, acc_k, acc_p, rdf, corr_v
